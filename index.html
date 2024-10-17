@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Interactivo con Login</title>
+    
+    <!-- Enlaces a los estilos y scripts externos -->
+    <link rel="stylesheet" href="style.css"> <!-- Enlace al archivo CSS externo -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" /> <!-- CSS de Leaflet -->
+
+    <!-- Scripts para Leaflet y Chart.js -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+
+    <!-- Cargar crypto-js desde el CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <!-- Firebase -->
+    <script type="module">
+        // Importar Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyDseEKTX_rbDDwBvDiNuUcWCHwze_rkeEo",
+            authDomain: "oaxacamapa25.firebaseapp.com",
+            projectId: "oaxacamapa25",
+            storageBucket: "oaxacamapa25.appspot.com",
+            messagingSenderId: "413932346267",
+            appId: "1:413932346267:web:b831994123adbf33f11f3e",
+            measurementId: "G-MP0D83LR21"
+        };
+
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Función para mostrar contenido basado en el rol del usuario
+        function mostrarContenidoBasadoEnRol(userRole) {
+            if (userRole === 'admin') {
+                document.getElementById('admin-panel').style.display = 'block';  // Mostrar panel de admin
+            }
+            document.getElementById('login-form').style.display = 'none'; // Ocultar formulario de login
+            document.getElementById('page-content').style.display = 'flex'; // Mostrar contenido general
+        }
+
+        // Función para cerrar sesión
+        window.cerrarSesion = function() {
+            signOut(auth).then(() => {
+                sessionStorage.removeItem('user');
+                location.reload();
+            }).catch((error) => {
+                console.log("Error al cerrar sesión:", error.message);
+            });
+        };
+
+        // Verificar si el usuario está autenticado al cargar la página
+        window.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(sessionStorage.getItem('user'));
+            if (user) {
+                mostrarContenidoBasadoEnRol(user.role);
+            } else {
+                console.log("No se encontró sesión activa.");
+            }
+        });
+
+    </script>
+</head>
+<body>
+
+    <!-- Formulario de login -->
+    <form id="login-form" onsubmit="event.preventDefault(); login();" class="login-form">
+        <h2>Iniciar Sesión</h2>
+        <label for="username">Usuario</label>
+        <input type="text" id="username" name="username" placeholder="Usuario" required autocomplete="username">
+        <label for="password">Contraseña</label>
+        <input type="password" id="password" name="password" placeholder="Contraseña" required autocomplete="current-password">
+        <button type="submit" class="login-button">Iniciar sesión</button>
+        <p id="login-message" class="login-message"></p> <!-- Mensaje de error en caso de login incorrecto -->
+    </form>    
+    
+    <!-- Panel de administración solo para el administrador -->
+    <div id="admin-panel" style="display: none;" class="admin-panel">
+        <h2>Panel de Administración</h2>
+        <div class="admin-controls">
+            <input type="text" id="new-username" placeholder="Nuevo nombre de usuario" required autocomplete="new-username">
+            <input type="password" id="new-password" placeholder="Nueva contraseña" required autocomplete="new-password">
+            <div class="admin-buttons">
+                <button onclick="registrarUsuario()">Crear Usuario</button>
+                <button onclick="eliminarUsuario()">Eliminar Usuario</button>
+            </div>
+        </div>
+        <button id="logout-button" onclick="cerrarSesion()">Cerrar Sesión</button> <!-- Botón de cerrar sesión -->
+    </div>
+
+    <!-- Contenido de la página principal (mapa y tabla) -->
+    <div id="page-content" style="display: none;" class="content-container">
+        <!-- Panel izquierdo con tabla y gráfico -->
+        <div class="left-panel">
+            <!-- Gráfico -->
+            <div class="chart-container">
+                <canvas id="chart" width="400" height="300"></canvas>
+            </div>
+
+            <!-- Tabla de información -->
+            <div class="table-container" id="info-table-container">
+                <table id="info-table">
+                    <thead>
+                        <tr>
+                            <th>SECCION</th>
+                            <th>PVEM</th>
+                            <th>MORENA</th>
+                            <th>PRI</th>
+                            <th>PAN</th>
+                            <th>MC</th>
+                            <th>MUJER</th>
+                            <th>NULOS</th>
+                            <th>PT</th>
+                            <th>PRD</th>
+                            <th>PUP</th>
+                            <th>FXMO</th>
+                            <th>NAO</th>
+                            <th>PAN-PRI</th>
+                            <th>PVEM-FXMO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="info-table-body"></tbody>
+                </table>
+            </div>
+
+            <button id="toggle-ocultar-btn" class="toggle-button">Alternar ocultar polígonos</button>
+        </div>
+
+        <!-- Contenedor del mapa -->
+        <div id="map" class="map-container"></div>
+    </div>
+</body>
+</html>
+    <!-- Loader para mostrar mientras se cargan las capas GeoJSON -->
+    <div id="loader" style="display:none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px;">
+        <p>Cargando...</p>
+    </div>
+
+    <!-- Importar los módulos -->
+    <script type="module" src="./usuario.obf.js"></script> <!-- Cargar usuario.js -->
+    <script type="module" src="./capa.obf.js"></script> <!-- Cargar capa.js -->
+
+    <script type="module">
+        import { inicializarMapa, cargarCapaINEGI, cargarCapaOriginal, cargarCapaColonias, toggleOcultarPoligonos } from './capa.obf.js';
+        import { mostrarSumaDeColumnas, actualizarGrafico, mostrarDatosCompletos } from './grafico.obf.js';
+
+        // Exponer funciones globalmente para que sean accesibles en el HTML
+        window.cargarCapaINEGI = cargarCapaINEGI;
+        window.cargarCapaOriginal = cargarCapaOriginal;
+        window.cargarCapaColonias = cargarCapaColonias;
+        window.mostrarSumaDeColumnas = mostrarSumaDeColumnas;
+        window.actualizarGrafico = actualizarGrafico;
+        window.mostrarDatosCompletos = mostrarDatosCompletos;
+        window.toggleOcultarPoligonos = toggleOcultarPoligonos;
+        
+        // Función para cerrar sesión automáticamente al recargar
+        window.addEventListener('beforeunload', function () {
+            sessionStorage.removeItem('user'); // Eliminar datos de sesión cuando la página se recarga
+        });
+
+        // Función para cerrar sesión
+        window.cerrarSesion = function() {
+            sessionStorage.removeItem('user'); // Eliminar datos de sesión
+            location.reload(); // Recargar la página
+        };
+
+        // Función para mostrar contenido, gráfico y tabla
+        window.mostrarContenido = function mostrarContenido() {
+            console.log("Mostrando contenido...");
+            const user = JSON.parse(sessionStorage.getItem('user'));
+
+            if (user && user.esAdmin) {
+                document.getElementById('admin-panel').style.display = 'block'; // Mostrar el panel de admin si es administrador
+            }
+
+            // Mostrar contenido principal
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('page-content').style.display = 'flex';
+
+            // Cargar todas las capas y mostrar las sumas y los datos en la tabla
+            fetch('https://raw.githubusercontent.com/ceheba99/CesarBarrosoGJSON/main/proyecto%202%2027%20sept.geojson')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error al cargar el GeoJSON');
+                }
+                return response.json();
+            })
+            .then(geojsonData => {
+                mostrarSumaDeColumnas(geojsonData); // Mostrar las sumas en el gráfico
+                mostrarDatosCompletos(geojsonData); // Mostrar todos los datos en la tabla
+            })
+            .catch(error => {
+                console.error('Error al procesar el GeoJSON:', error);
+                alert('Hubo un error al cargar los datos del mapa. Por favor, inténtalo de nuevo.');
+            });
+        };
+
+        // Inicializar mapa y cargar capas
+        document.addEventListener('DOMContentLoaded', function() {
+            const controlCapas = inicializarMapa();
+            cargarCapaOriginal(controlCapas);
+            cargarCapaINEGI(controlCapas);
+            cargarCapaColonias(controlCapas);
+            document.getElementById('toggle-ocultar-btn').addEventListener('click', toggleOcultarPoligonos);
+
+            // Verificar si ya hay una sesión iniciada
+            const user = JSON.parse(sessionStorage.getItem('user'));
+            if (user) {
+                console.log("Sesión encontrada. Mostrando contenido...");
+                mostrarContenido(); // Si hay sesión, mostrar el contenido directamente
+            } else {
+                console.log("No se encontró sesión activa.");
+            }
+        });
+    </script>    
+</body>
+</html>
